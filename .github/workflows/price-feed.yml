@@ -1,5 +1,5 @@
 # Flux de prix FaBdex : chaque nuit, recopie les prix Flesh and Blood de TCGCSV (prix TCGplayer, USD)
-# dans des fichiers statiques publiés sur GitHub Pages. L'app FaBdex lit ce flux au lieu d'appeler
+# dans des fichiers statiques publiés sur GitHub Pages, et publie la base de cartes à jour (cards/). L'app FaBdex lit ce flux au lieu d'appeler
 # TCGCSV directement (règles d'usage de TCGCSV : pas d'appel direct depuis une app mobile).
 name: price-feed
 
@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,6 +28,18 @@ jobs:
           node-version: 22
       - name: Construire le flux de prix
         run: node --experimental-strip-types --no-warnings=ExperimentalWarning scripts/build-price-feed.ts --out site
+      # Base de cartes à jour (the-fab-cube épinglé + données officielles LSS : noms FR / JA,
+      # nouvelles cartes) pour la mise à jour sans nouvelle version de l'app. Un échec ici ne
+      # bloque pas les prix : l'app garde alors sa base.
+      - name: Construire la base de cartes
+        continue-on-error: true
+        working-directory: card-data
+        run: |
+          R="node --experimental-strip-types --no-warnings=ExperimentalWarning --import ./scripts/tests/register-ts.mjs"
+          $R scripts/import-cards.ts
+          $R scripts/fetch-lss.ts
+          $R scripts/import-cards.ts
+          $R scripts/build-card-data-feed.ts ../site/cards
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
