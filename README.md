@@ -6,6 +6,7 @@ Flux de prix quotidien pour l'app FaBdex (Flesh and Blood TCG).
 - Chaque nuit, `scripts/build-price-feed.ts` télécharge les prix des extensions Flesh and Blood et publie sur GitHub Pages :
   - `manifest.json` : `{ day, source, currency, generatedAt, groups }`
   - `groups/{groupId}.json` : `[[productId, subtype, market, low, mid, high], …]`
+  - `fx.json` : `{ day, base: 'USD', source: 'ECB', rates: { EUR, JPY } }`, taux de référence de la [BCE](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html) du jour ramenés au dollar, pour afficher les prix en euros ou en yens (simple conversion, pas des prix Cardmarket).
 - L'app lit ce flux au lieu d'appeler TCGCSV directement (règles d'usage de TCGCSV).
 
 
@@ -20,4 +21,4 @@ Sources : [the-fab-cube](https://github.com/the-fab-cube/flesh-and-blood-cards) 
 
 `card-data/` est une **copie** de fichiers de l'app (dépôt privé `Zartindev/fabdex`) : `scripts/import-cards.ts`, `scripts/fetch-lss.ts`, `scripts/build-card-data-feed.ts`, `scripts/tests/register-ts.mjs`, `src/lib/card-language.ts`, `src/lib/search.ts`, `src/types/card.ts`. À recopier quand l'un d'eux change (en particulier `SCHEMA_VERSION` ou le commit épinglé) : l'app n'accepte qu'une base de son propre schéma.
 
-FaBdex n'est pas affilié à Legend Story Studios ni à TCGplayer.
+FaBdex n'est pas affilié à Legend Story Studios, à TCGplayer ni à la BCE.
