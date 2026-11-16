@@ -7,6 +7,10 @@
  *
  *   dist/price-feed/manifest.json         { day, source, currency, generatedAt, groups }
  *   dist/price-feed/groups/{groupId}.json [[productId, subtype, market, low, mid, high], …]
+ *   dist/price-feed/fx.json               { day, base: 'USD', source: 'ECB', rates: { EUR, JPY } }
+ *
+ * `fx.json` : taux de change de référence de la BCE du jour (gratuits, publics), ramenés au dollar,
+ * pour que l'app affiche les prix en euros ou en yens (conversion, pas des prix Cardmarket).
  *
  * Usage : node --experimental-strip-types scripts/prices/build-price-feed.ts [--out dir]
  * Budget : ~112 requêtes par jour, une à la fois avec une pause, client identifié.
@@ -14,12 +18,43 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BASE = 'https://tcgcsv.com/tcgplayer/62';
 const USER_AGENT = 'FaBdex-price-feed/1.0';
 const PAUSE_MS = 120;
+const ECB_DAILY = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml';
+
+export interface FxFeed {
+  day: string;
+  base: 'USD';
+  source: 'ECB';
+  rates: { EUR: number; JPY: number };
+}
+
+/**
+ * Taux BCE du jour (XML : 1 EUR = x USD, y JPY…) → unités pour 1 USD, arrondies. Null si le XML
+ * est illisible ou incomplet.
+ */
+export function parseEcbDailyXml(xml: string): FxFeed | null {
+  const day = /time=['"](\d{4}-\d{2}-\d{2})['"]/.exec(xml)?.[1];
+  const rate = (currency: string) => {
+    const match = new RegExp(`currency=['"]${currency}['"]\\s+rate=['"]([0-9.]+)['"]`).exec(xml);
+    const value = match ? Number(match[1]) : NaN;
+    return Number.isFinite(value) && value > 0 ? value : null;
+  };
+  const usd = rate('USD');
+  const jpy = rate('JPY');
+  if (!day || usd === null || jpy === null) return null;
+  const round = (value: number, digits: number) => Number(value.toFixed(digits));
+  return {
+    day,
+    base: 'USD',
+    source: 'ECB',
+    rates: { EUR: round(1 / usd, 6), JPY: round(jpy / usd, 4) },
+  };
+}
 
 interface RawPrice {
   productId: number;
@@ -95,9 +130,22 @@ async function main() {
   };
   writeFileSync(join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`✔ ${groups.length} groupes, ${rows} prix → ${out} (${day})`);
+
+  // Taux de change : un échec ne bloque pas les prix (l'app garde ses derniers taux connus).
+  try {
+    const fx = parseEcbDailyXml(await (await get(ECB_DAILY)).text());
+    if (!fx) throw new Error('XML BCE illisible');
+    writeFileSync(join(out, 'fx.json'), `${JSON.stringify(fx)}\n`);
+    console.log(`✔ taux BCE du ${fx.day} : 1 USD = ${fx.rates.EUR} EUR, ${fx.rates.JPY} JPY`);
+  } catch (error) {
+    console.warn('⚠ taux de change non publiés :', error);
+  }
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exit(1);
-});
+// Lancé en script seulement (pas quand un test l'importe).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
