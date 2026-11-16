@@ -1,0 +1,42 @@
+# Flux de prix FaBdex : chaque nuit, recopie les prix Flesh and Blood de TCGCSV (prix TCGplayer, USD)
+# dans des fichiers statiques publiés sur GitHub Pages. L'app FaBdex lit ce flux au lieu d'appeler
+# TCGCSV directement (règles d'usage de TCGCSV : pas d'appel direct depuis une app mobile).
+name: price-feed
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 21 * * *' # TCGCSV publie vers 20 h UTC
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Construire le flux de prix
+        run: node --experimental-strip-types --no-warnings=ExperimentalWarning scripts/build-price-feed.ts --out site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
