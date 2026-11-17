@@ -19,6 +19,6 @@ Chaque nuit aussi, `card-data/` reconstruit la base de cartes de l'app et la pub
 
 Sources : [the-fab-cube](https://github.com/the-fab-cube/flesh-and-blood-cards) (commit épinglé) et l'API publique de Legend Story Studios (noms français et japonais, langues des extensions, cartes récentes pas encore dans the-fab-cube). Aucune image n'est copiée : seulement leurs adresses.
 
-`card-data/` est une **copie** de fichiers de l'app (dépôt privé `Zartindev/fabdex`) : `scripts/import-cards.ts`, `scripts/fetch-lss.ts`, `scripts/build-card-data-feed.ts`, `scripts/tests/register-ts.mjs`, `src/lib/card-language.ts`, `src/lib/search.ts`, `src/types/card.ts`. À recopier quand l'un d'eux change (en particulier `SCHEMA_VERSION` ou le commit épinglé) : l'app n'accepte qu'une base de son propre schéma.
+`card-data/` est une **copie** de fichiers de l'app (dépôt privé `Zartindev/fabdex`) : `scripts/import-cards.ts`, `scripts/fetch-lss.ts`, `scripts/build-card-data-feed.ts`, `scripts/tests/register-ts.mjs`, `src/lib/card-language.ts`, `src/lib/card-legality.ts`, `src/lib/search.ts`, `src/types/card.ts`. À recopier quand l'un d'eux change (en particulier `SCHEMA_VERSION` ou le commit épinglé) : l'app n'accepte qu'une base de son propre schéma.
 
 FaBdex n'est pas affilié à Legend Story Studios, à TCGplayer ni à la BCE.

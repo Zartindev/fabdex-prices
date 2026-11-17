@@ -35,6 +35,11 @@ import type {
   Rarity,
 } from '../src/types/card';
 import { officialNameKey } from '../src/lib/card-language.ts';
+import {
+  formatStatusFromFlags,
+  formatStatusFromLegalList,
+  type FormatStatusMap,
+} from '../src/lib/card-legality.ts';
 import { normalizeSearchText } from '../src/lib/search.ts';
 
 import type { LssCard, LssExtraCard, LssSnapshot } from './fetch-lss.ts';
@@ -52,7 +57,7 @@ const DEFAULT_REF = 'fa8e6bd71d7f9a789aadf082920ea4760bd08ced';
  * Version du schéma de notre base. À incrémenter à chaque changement de tables/colonnes :
  * elle fait partie du nom de fichier sur l'appareil, ce qui force la recopie de la base.
  */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 const SOURCE_REPO = 'the-fab-cube/flesh-and-blood-cards';
 /** Seul l'anglais est complet dans la source (les autres langues n'ont que quelques cartes). */
@@ -109,6 +114,7 @@ interface RawCard {
   blitz_suspended: boolean;
   cc_suspended: boolean;
   commoner_suspended: boolean;
+  ll_restricted?: boolean;
   printings: RawPrinting[];
 }
 
@@ -227,6 +233,12 @@ function convertCard(raw: RawCard): Card {
     legalFormats: legalFormats(raw),
   };
 }
+
+/**
+ * Statut par format (légale, bannie, suspendue, Living Legend, restreinte, hors format), écrit dans
+ * `cards.format_status` (schéma 5). Rempli pendant la conversion des cartes.
+ */
+const formatStatusById = new Map<string, FormatStatusMap>();
 
 /**
  * Hébergeurs d'images qui ne répondent plus, remplacés par un hébergeur équivalent (mêmes chemins).
@@ -475,6 +487,9 @@ const SCHEMA_SQL = `
     type_text TEXT NOT NULL,
     text TEXT,
     legal_formats TEXT NOT NULL,
+    -- statut par format (JSON { cc, blitz, ll, sage, commoner } : legal / banned / suspended /
+    -- living-legend / restricted / not-legal), schéma 5
+    format_status TEXT NOT NULL DEFAULT '{}',
     -- 'fab-cube' (source principale) ou 'lss' (carte officielle récente absente de the-fab-cube)
     source TEXT NOT NULL DEFAULT 'fab-cube'
   );
@@ -544,8 +559,8 @@ function writeDatabase(
 
   const insertCard = db.prepare(
     `INSERT INTO cards (id, name, name_search, pitch, color, cost, power, defense, health,
-       intelligence, types, type_text, text, legal_formats, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       intelligence, types, type_text, text, legal_formats, format_status, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   for (const c of cards) {
     insertCard.run(
@@ -563,6 +578,7 @@ function writeDatabase(
       c.typeText,
       c.text,
       JSON.stringify(c.legalFormats),
+      JSON.stringify(formatStatusById.get(c.id) ?? formatStatusFromLegalList(c.legalFormats)),
       official.lssCardIds.has(c.id) ? 'lss' : 'fab-cube',
     );
   }
@@ -698,6 +714,7 @@ async function main() {
 
   for (const rawCard of rawCards) {
     cards.push(convertCard(rawCard));
+    formatStatusById.set(rawCard.unique_id, formatStatusFromFlags(rawCard));
     for (const rawPrinting of rawCard.printings) {
       const printing = convertPrinting(rawPrinting, rawCard.unique_id);
       if (!printing) continue;
@@ -729,6 +746,8 @@ async function main() {
       warn(`extension absente de set.json ajoutée depuis LSS : ${printing.setId}`);
     }
     cards.push(card);
+    // Provisoire : l'API LSS ne donne pas la légalité (déduite de la rareté, voir convertLssCard).
+    formatStatusById.set(card.id, formatStatusFromLegalList(card.legalFormats));
     printings.push(printing);
     printingIds.add(printing.id);
     lssCardIds.add(card.id);
